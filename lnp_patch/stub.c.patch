@@ -1,0 +1,25 @@
+--- ../lnp.orig/liblnp/stub.c	Sun Jan  2 15:36:49 2000
++++ stub.c	Tue Oct 30 15:11:48 2001
+@@ -13,6 +13,7 @@
+ #include <sys/time.h>
+ #include <sys/types.h>
+ #include <errno.h>
++#include <string.h>
+ 
+ //for debugging
+ #include <stdio.h>
+@@ -191,12 +192,12 @@
+     			tx_active = 0;
+     			break;
+     		default:
+-    			rcv_state++;
++    			((int)rcv_state)++;
+     	}
+     	break;
+ 	case RCV_WAIT_LEN:
+ 		endOfData=byte_read+3;
+-		rcv_state++;
++		((int)rcv_state)++;
+ 		break;
+     case RCV_WAIT_DATA:
+ 		if (bytesRead == endOfData)

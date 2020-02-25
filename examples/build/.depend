@@ -1,0 +1,13 @@
+rover.o: rover.c /home/mfalco/devel/rcx/legOS/include/conio.h \
+ /home/mfalco/devel/rcx/legOS/boot/config.h \
+ /home/mfalco/devel/rcx/legOS/include/rom/lcd.h \
+ /home/mfalco/devel/rcx/legOS/include/dlcd.h \
+ /home/mfalco/devel/rcx/legOS/include/sys/bitops.h \
+ /home/mfalco/devel/rcx/legOS/include/dkey.h \
+ /home/mfalco/devel/rcx/legOS/include/tm.h \
+ /home/mfalco/devel/rcx/legOS/include/mem.h \
+ /home/mfalco/devel/rcx/legOS/include/unistd.h \
+ /home/mfalco/devel/rcx/legOS/include/time.h \
+ /home/mfalco/devel/rcx/legOS/include/dsensor.h \
+ /home/mfalco/devel/rcx/legOS/include/sys/h8.h \
+ /home/mfalco/devel/rcx/legOS/include/dmotor.h

@@ -1,0 +1,462 @@
+
+#make sure rcl.tcl is sourced
+if ![info exists emu_RCX] {
+	source $env(EMULEGOS_ROOT)/rcx.tcl
+}
+
+#supported sensors
+set emu_RCX(sensor_types) {
+	raw 
+	touch 
+	swmux
+	mux 
+	light 
+	rotation 
+	dirpd
+	velocity
+	}
+
+#these sensors won't work under a multiplexor, at least not normally
+set emu_RCX(nonMux_sensor_types) {mux rotation velocity}
+
+#parse command line args
+
+if [catch {array set parms [checkParms rcx.tk $argv \
+			{} \
+			{ \
+			-host localhost \
+			-port 0x1E60 \
+			-id 8 \
+			-source {} \
+			-sen1 raw \
+			-sen1a raw -sen1b raw -sen1c raw \
+			-sen2 raw \
+			-sen2a raw -sen2b raw -sen2c raw \
+			-sen3 raw \
+			-sen3a raw -sen3b raw -sen3c raw \
+			-bg yellow
+			} \
+			{-ir -sensors} ] \
+	} result] {
+	puts $result
+	return
+}
+
+set ir_serverhost $parms(-host)
+set ir_serverport $parms(-port)
+set ir_lnp_id $parms(-id)
+set ir_enabled $parms(-ir)
+
+if {$parms(-source) != {}} {
+	source $parms(-source)
+}
+
+if [expr $parms(-sensors) ] {
+	puts "supported sensor values = $emu_RCX(sensor_types)"
+	exit 0;
+}
+
+set title [file root [file tail [info nameofexecutable]]]
+if [expr $ir_enabled] {
+	set title "$title LNP ID $ir_lnp_id"
+}
+
+foreach sen {1 1a 1b 1c 2 2a 2b 2c 3 3a 3b 3c} {
+	set emu_RCX(sensor_${sen}_type) $parms(-sen$sen)
+}
+#start of gui
+
+wm title . $title
+
+#create gui
+
+
+#yellow rcx frame
+
+frame .rcx -relief raised -bg $parms(-bg) -borderwidth 10
+
+frame .rcx.sensor -bg $parms(-bg)
+
+frame .rcx.control -bg $parms(-bg)
+
+frame .rcx.motor -bg $parms(-bg)
+
+
+
+
+#control frame
+frame .rcx.control.left -bg $parms(-bg)
+frame .rcx.control.mid -bg $parms(-bg)
+frame .rcx.control.right -bg $parms(-bg)
+
+pack .rcx.control.left -side left
+pack .rcx.control.mid -side left
+pack .rcx.control.right
+
+#buttons
+set button_width 4
+
+array set btn_color {View black OnOff red Prgm gray Run green}
+array set btn_sides {View left OnOff left Prgm right Run right}
+
+foreach btn {View OnOff Prgm Run} {
+	set f .rcx.control.$btn_sides($btn)
+	label $f.l_$btn -text $btn -bg $parms(-bg)
+	button $f.b_$btn -width $button_width -bg $btn_color($btn) -borderwidth 3 \
+		-activebackground $btn_color($btn)
+	#button bindings
+	bind $f.b_$btn <ButtonPress-1> \
+		"RCX_${btn}Down; $f.b_$btn configure -relief raised"
+	bind $f.b_$btn <ButtonRelease-1> RCX_${btn}Up
+	bind $f.b_$btn <ButtonPress-3> \
+		"RCX_${btn}Down; $f.b_$btn configure -relief sunken"
+	#I don't define a release event for button 3, this way the button can stay pressed
+
+	pack $f.l_$btn
+	pack $f.b_$btn
+}
+
+
+
+#lcd
+frame .rcx.control.mid.lcd -bg $parms(-bg)
+entry .rcx.control.mid.lcd.display -bg gray -width 6 -state disabled -textvar emu_RCX(LCD) -font -*-*-bold-*-*-*-30-*
+pack .rcx.control.mid.lcd.display -padx 10
+pack .rcx.control.mid.lcd
+
+#end control frame
+
+#start motor frame
+set motor_height 2
+set motor_width 9
+
+foreach mtr {a b c} {
+	frame .rcx.motor.$mtr -relief raised -borderwidth 3
+	label .rcx.motor.$mtr.direction -textvar emu_RCX(motor_${mtr}_direction_text) \
+		 -height $motor_height -width $motor_width
+	label .rcx.motor.$mtr.speed -textvar emu_RCX(motor_${mtr}_speed) \
+		-height $motor_height -width $motor_width
+	foreach obj {direction speed} {
+		pack .rcx.motor.$mtr.$obj
+	}
+	pack .rcx.motor.$mtr -side left
+}
+
+#end motor frame
+
+
+
+#start sensor frame
+set sensor_width 9
+
+
+proc SensorTypeSelect {sen} {
+	global emu_RCX
+
+	set type $emu_RCX(sensor_${sen}_type)
+	
+
+ 	set real {1 2 3}
+    	if [expr [lsearch -exact $real $sen] == -1] {	 
+		#not a real sensor, create a new window
+		set mux [string range $sen 0 0]
+		destroy .mux_$mux.$sen.mod
+
+		frame .mux_$mux.$sen.mod
+		set f [frame .mux_$mux.$sen.mod.$type]
+		pack .mux_$mux.$sen.mod
+		
+    	} else {
+		if {$type != {mux}} {
+			wm withdraw .mux_$sen
+		}
+		#remove existing sensor type frame
+		destroy .rcx.sensor.$sen.mod
+
+		frame .rcx.sensor.$sen.mod
+		set f [frame .rcx.sensor.$sen.mod.$type]
+		pack .rcx.sensor.$sen.mod
+	}	
+	
+	
+	
+	CreateSensor_$type $sen $f
+	pack $f
+
+}
+
+proc CreateSensor_mux {sen f} {
+	wm deiconify .mux_$sen
+	return [CreateSensor_raw $sen $f]
+};#endof CreateSensor_mux
+
+
+proc CreateSensor_velocity {sen f} {
+    
+    global emu_RCX emu_velocity
+
+
+    set emu_velocity(sensor_${sen}_direction) 1
+    set emu_velocity(sensor_${sen}_value) 0
+    set emu_velocity(sensor_${sen}_bind) unbound
+
+
+    #set f [frame .rcx.sensor.$sen.mod.velocity]
+    label $f.lb -text "ticks/sec"
+
+
+    scale $f.scale -from -$emu_velocity(velocity_max) -to $emu_velocity(velocity_max) \
+	-orient horizontal \
+	-tickinterval $emu_velocity(velocity_max) \
+	-showvalue true -variable emu_velocity(sensor_${sen}_value) \
+	-command "velocity_set $sen"
+
+    #tie velocity sensor to a motor
+    set m $f.motor.menu
+    menubutton $f.motor -textvar emu_velocity(sensor_${sen}_bind) -menu $m \
+	-relief raised
+    menu $m
+
+    $m add checkbutton -label "polarity" \
+	-variable emu_velocity(sensor_${sen}_direction) \
+	-onvalue 1 -offvalue -1 \
+	-command "velocity_motor_update \$emu_velocity\(sensor_${sen}_bind\)"
+
+	$m add separator
+
+    foreach motor {unbound a b c} {
+	$m add radiobutton -label $motor  \
+	    -var emu_velocity(sensor_${sen}_bind) \
+	    -indicator off -command "velocity_motor_update $motor"
+	    
+    }
+
+    pack $f.scale
+    pack $f.lb
+    pack $f.motor
+    
+    pack $f
+    
+};#endof create velocity sensor
+
+
+proc CreateSensor_raw {sen f} {
+	global emu_RCX
+
+	#set f [frame .rcx.sensor.$sen.mod.raw]
+
+	entry $f.val -textvar emu_RCX(sensor_${sen}_value_raw) \
+		 -width 9
+	bind $f.val <Return> "RCX_SetSensorValue $sen \$emu_RCX\(sensor_${sen}_value_raw\)"
+	button $f.dcr -text "<" -command "RCX_DcrSensorValue $sen"
+
+	button $f.incr -text ">" -command "RCX_IncrSensorValue $sen"
+	pack $f.val
+	pack $f.dcr -side left
+	pack $f.incr
+
+	#pack $f
+
+}
+
+proc CreateSensor_rotation {sen f} {
+
+	global emu_RCX
+
+	#set f [frame .rcx.sensor.$sen.mod.rot]
+
+	label $f.val -textvar emu_RCX(sensor_${sen}_value_rotation) \
+		 -width 9
+	button $f.dcr -text "<" -command "RCX_DcrRotationValue $sen"
+
+	button $f.incr -text ">" -command "RCX_IncrRotationValue $sen"
+	pack $f.val
+	pack $f.dcr -side left
+	pack $f.incr
+
+	#pack $f
+
+}
+
+proc CreateSensor_touch {sen f} {
+
+	global emu_RCX TOUCH_ON TOUCH_OFF
+
+	#set raw value to an untouched sensor
+	RCX_SetSensorValue $sen $TOUCH_OFF
+
+	#set f [frame .rcx.sensor.$sen.mod.touch]
+
+	button $f.button -bg yellow -activebackground yellow
+
+	#button bindings
+	bind $f.button <ButtonPress-1> \
+		"RCX_SetSensorValue $sen $TOUCH_ON; $f.button configure -relief raised"
+	bind $f.button <ButtonRelease-1> "RCX_SetSensorValue $sen $TOUCH_OFF"
+	bind $f.button <ButtonPress-3> \
+		"RCX_SetSensorValue $sen $TOUCH_ON; $f.button configure -relief sunken"
+	#I don't define a release event for button 3, this way the button can stay pressed
+
+
+	pack $f.button
+	#pack $f
+}
+
+
+proc CreateSensor_swmux {sen myframe} {
+	global emu_RCX
+
+	RCX_SetSwmuxValues $sen 0 0 0 0
+
+	#set myframe [frame .rcx.sensor.$sen.mod.swmux]
+	set row1 [frame $myframe.row1]
+	set row2 [frame $myframe.row2]
+
+	foreach but {a b c d} {
+		if {$but == {a} || $but == {b}} {
+			set f $row1
+		} else {
+			set f $row2
+		}
+		button $f.button_$but -text $but -bg yellow -activebackground yellow -width 1
+
+		#button bindings	
+		bind $f.button_$but <ButtonPress-1> \
+		"RCX_SetSwmuxValue $sen $but 1; $f.button_$but configure -relief raised"
+		bind $f.button_$but <ButtonRelease-1> "RCX_SetSwmuxValue $sen $but 0"
+		bind $f.button_$but <ButtonPress-3> \
+		"RCX_SetSwmuxValue $sen $but 1; $f.button_$but configure -relief sunken"
+	#I don't define a release event for button 3, this way the button can stay pressed
+
+
+		pack $f.button_$but -side left
+	}
+	
+	pack $row1
+	pack $row2
+
+	#pack $myframe
+};#endof swmux
+
+proc CreateSensor_dirpd {sen f} {
+	global emu_RCX
+
+	RCX_SetDirpdValue $sen none
+	set emu_RCX(sensor_dirpd_val_${sen}) none
+
+	#set f [frame $f.$sen.mod.dprox]
+
+	foreach but {none L C R} {
+
+		radiobutton $f.rb_$but -text $but -value $but -variable emu_RCX(sensor_dirpd_val_${sen}) -command "RCX_SetDirpdValue $sen \$emu_RCX(sensor_dirpd_val_${sen})"
+
+		if {$but != {none}} {
+			pack $f.rb_$but -side left
+		} else {
+			pack $f.rb_$but
+		}
+	}
+	
+	#pack $f
+};#endof dirpd
+
+
+
+proc CreateSensor_light {sen f} {
+
+	global emu_RCX
+
+	#set f [frame .rcx.sensor.$sen.mod.light]
+
+	scale $f.scale -from $emu_RCX(sensor_light_min) -to $emu_RCX(sensor_light_max) -orient horizontal \
+		-tickinterval [expr ($emu_RCX(sensor_light_max) - $emu_RCX(sensor_light_min)) /2] \
+		-showvalue true -variable emu_RCX(sensor_${sen}_value_light) \
+		-command "RCX_SetLightValue $sen"
+
+	pack $f.scale
+	#pack $f
+
+}
+
+
+proc makesenmod {sen f} {
+	global emu_RCX sensor_width
+	frame $f.$sen -relief raised -borderwidth 3
+
+
+	menubutton $f.$sen.type -textvar emu_RCX(sensor_${sen}_type) \
+		-menu $f.$sen.type.menu
+
+	set m [menu $f.$sen.type.menu -tearoff 0]
+	
+	if [expr [lsearch {1 2 3} $sen] != -1] {
+		#real sensor port
+		set sensor_types $emu_RCX(sensor_types)
+	} else {
+		#muxed sensor port
+		set sensor_types {}
+		foreach st $emu_RCX(sensor_types) {
+			if [expr [lsearch $emu_RCX(nonMux_sensor_types) $st] == -1] {
+				lappend sensor_types $st
+			}
+			
+		}
+	}
+
+
+	foreach type $sensor_types {
+		$m add radio -label $type -variable emu_RCX(sensor_${sen}_type) \
+			-command "SensorTypeSelect $sen"
+	}	
+
+	pack $f.$sen.type
+
+	label $f.$sen.status -textvar emu_RCX(sensor_${sen}_status_text) \
+		 -width $sensor_width
+
+
+	pack $f.$sen.status
+	
+
+	pack $f.$sen -side left
+
+};#endof makesenmod
+
+
+
+#end sensor frame
+
+
+#pack outer frames
+
+pack .rcx.sensor
+pack .rcx.control
+pack .rcx.motor
+pack .rcx
+
+proc keep_alive {} {
+	after 100 keep_alive
+}
+
+
+RCX_Init
+keep_alive
+
+foreach sen {1 2 3} {
+	set w [toplevel .mux_$sen]
+	foreach sub {a b c} {
+		set f [frame $w.$sub]
+		pack $f -side left	
+	}
+}
+
+foreach sen {1 2 3} {
+	makesenmod $sen .rcx.sensor
+	SensorTypeSelect $sen
+}
+
+foreach sub {1a 1b 1c 2a 2b 2c 3a 3b 3c} {
+	set sen [string range $sub 0 0]
+	makesenmod $sub .mux_$sen
+	SensorTypeSelect $sub
+}

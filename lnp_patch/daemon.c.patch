@@ -1,0 +1,15 @@
+--- daemon.c	Sat Aug 18 13:05:51 2001
++++ ../lnp.orig/lnpd/daemon.c	Sun Jan  2 23:36:49 2000
+@@ -150,12 +150,6 @@
+ 			// advance to next client
+ 			next_client_to_transmit =
+ 				current_client->next ? current_client->next : client_info_list;
+-
+-			//Mark Falco, add retransmission to all pc clients
+-			log(LNPD_LOG_CLIENT,"retrasnmitting packet to all clients");
+-			deliver_packet(buffer,current_client->packet_length);
+-			log(LNPD_LOG_CLIENT,"done retansmitting packet to all clients");
+-
+ 			return current_client->packet_length;
+ 		}
+ 		// check next one
