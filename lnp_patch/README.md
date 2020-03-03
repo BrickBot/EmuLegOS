@@ -9,5 +9,7 @@ This allows for communication between pc clients, and thus between multiple
 virtual RCXs.  As with the stub.c modification LNPD will continue to function
 normally, can the modified version can be used all the time
 
+```
 $ patch stub.c stub.c.patch
 $ patch daemon.c daemon.c.patch
+```

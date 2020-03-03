@@ -6,10 +6,10 @@ To use this for your own project copy Makefile, common.mk, and emu.mk into the d
 
 The following build targets are available.
 
-make - this will build an x86 and .lx version of your code
-make all - same as above, this is the default target
-make emu - just build the emulated robot, not the .lx
-make load - use dll to load program to RCX using LNPD
-make bload - use dll to load program to RCX withought LNPD
-make clean - will erase all genearted files exception for .lx
-make realclean - same as above but includes .lx
+* make - this will build an x86 and .lx version of your code
+* make all - same as above, this is the default target
+* make emu - just build the emulated robot, not the .lx
+* make load - use dll to load program to RCX using LNPD
+* make bload - use dll to load program to RCX withought LNPD
+* make clean - will erase all genearted files exception for .lx
+* make realclean - same as above but includes .lx
